@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+
+    <!--首先创建一个数据源的  我们需要读取配置文件里面的信息来初始话我们的数据源-->
+
+    <context:property-placeholder location="classpath:properties/*.properties" />
+
+    <!--那我们就要写一个具有数据库连接信息的jdbc.properties文件 我门已经准备好了这些文件 -->
+
+    <!--接下来就是配置数据源了  我们选择的是阿里巴巴的德鲁伊数据源-->
+
+    <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" >
+        <property name="driverClassName" value="${jdbc.Driver}"></property>
+        <property name="url" value="${jdbc.url}"></property>
+        <property name="username" value="${jdbc.username}"></property>
+        <property name="password" value="${jdbc.password}"></property>
+        <property name="maxActive" value="5"></property>
+        <property name="minIdle" value="5"></property>
+    </bean>
+
+
+    <!--配置好了数据源 接下来就是配置我们的sqlSessionFactory   配置我们的接下来就是配置我们的sqlSessionFactory 我们需要传几样东西 就是我们数据源 还有我们的
+    mybatis配置文件的位置 还有我们扫描的mapper文件的位置  方便帮我们加载代理对象  所以我们需要一个扫描对象 就是我们-->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"></property>
+        <property name="configLocation" value="classpath:mybatis/mybatis-config.xml"></property>
+        <!--在这里我们没有将我们的mapper.xml文件和mapper分开 可是我们也没有指定我们的mapper.xml的位置 这样的话待会儿就会报错
+        说找不到mapper.xml的映射文件  所以我们现在在taotao_manager.xml中重新写一个build帮我们加载这个-->
+    </bean>
+
+
+    <!--配置扫描包 方便帮我们加载mapper代理对象-->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"></property>
+        <property name="basePackage" value="com.taotao.mapper,com.taotao.search.mapper"></property>
+    </bean>
+
+
+</beans>

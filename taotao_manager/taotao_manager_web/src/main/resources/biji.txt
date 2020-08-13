@@ -1,0 +1,229 @@
+今天我们开始了淘淘商场项目
+前面关于idea搭建这个项目 充满了艰辛  有问题可以参考百度的idea搭建淘淘商城 特别要注意的是要将common和parent发布到本地仓库里面
+
+项目搭建完了 就是做ssm的整合 这个整合也花了很多时间 有些莫名其妙的错误都会有  还是得多练 都已经忘记了
+简单回忆一下
+首先我们要准备spring的相关配置文件
+1.配置我们spring的dao层
+    1.1.准备jdbc.properties的配置文件
+        jdbc.Driver=com.mysql.jdbc.Driver
+        jdbc.url=jdbc:mysql://localhost:3306/taotao?useUnicode=true&characterEncoding=utf8&useSSL=true
+        jdbc.username=root
+        jdbc.password=root
+    2.1.配置数据源
+         <!--首先创建一个数据源的  我们需要读取配置文件里面的信息来初始话我们的数据源-->
+         <context:property-placeholder location="classpath:properties/jdbc.properties" />
+
+         <!--接下来就是配置数据源了  我们选择的是阿里巴巴的德鲁伊数据源-->
+
+            <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" >
+                <property name="driverClassName" value="${jdbc.Driver}"></property>
+                <property name="url" value="${jdbc.url}"></property>
+                <property name="username" value="${jdbc.username}"></property>
+                <property name="password" value="${jdbc.password}"></property>
+                <property name="maxActive" value="5"></property>
+                <property name="minIdle" value="5"></property>
+            </bean>
+
+    3.1.配置mybatis的sqlSessionFactory工厂
+            里面就要有相应的mybatis的配置文件 还有数据源的位置
+            还有指定mapper.xml的位置  但是我们这里的mapper.xml是和我们的接口的位置是放在一起的  所以不是在resources下面
+            的文件夹下面 所以项目启动的时候是加载不了的  所以我们就在taotao_manager_mapper里面的pom文件写了其他配置帮我们加载我们
+            mapper文件 详细看下面你的配置
+
+            <!--配置好了数据源 接下来就是配置我们的sqlSessionFactory   配置我们的接下来就是配置我们的sqlSessionFactory 我们需要传几样东西 就是我们数据源 还有我们的
+            mybatis配置文件的位置 还有我们扫描的mapper文件的位置  方便帮我们加载代理对象  所以我们需要一个扫描对象 就是我们-->
+            <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+                <property name="dataSource" ref="dataSource"></property>
+                <property name="configLocation" value="classpath:mybatis/mybatis-config.xml"></property>
+                <!--在这里我们没有将我们的mapper.xml文件和mapper分开 可是我们也没有指定我们的mapper.xml的位置 这样的话待会儿就会报错
+                说找不到mapper.xml的映射文件  所以我们现在在taotao_manager.xml中重新写一个build帮我们加载这个-->
+            </bean>
+
+    4.1.下面配置我们spring帮我们动态创建mapper对象的扫描包  这样我们的mapper动态代理对象就交给我们的spring管理了
+         <!--配置扫描包 方便帮我们加载mapper代理对象-->
+            <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+                <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"></property>
+                <property name="basePackage" value="com.taotao.mapper"></property>
+         </bean>
+
+
+
+
+2.spring配置好了  接下来就是配置我们的service
+    2.1.首先我们要配置一个扫描service的  帮我们将我们所有带service注解的全部交给我们spring来管理
+     <!--这是service层的配置-->
+        <!--扫描包加载service实现类-->
+        <context:component-scan base-package="com.taotao.service"></context:component-scan>
+    2.2.接下来就是配置我们的事务
+        我们需要一个事务的核心管理器  事务的核心管理器里面就有需要我们添加我们配置好的数据源 这样他就知道给我们哪个数据库加事务了
+           <!--接下来我们开始配置事务  配置事务需要一个核心的事务管理器-->
+            <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+                <!--然后增加属性  添加数据源-->
+                <property name="dataSource" ref="dataSource"></property>
+            </bean>
+    2.3.下面配置好了事务我们就来配置通知
+         <!--配置好了事务管理器 接下来就是通知-->
+            <tx:advice id="txAdvice" transaction-manager="transactionManager">
+                <tx:attributes>
+                    <!--  这里的表示如果该方法当前有事务  我们就在当前的事务中进行 否则就开启新的事务进行propagation="REQUIRED"
+                        而propagation="SUPPORTS" 就是当前有就进行 没有也不开启新事务
+                    -->
+                    <tx:method name="save*" propagation="REQUIRED"/>
+                    <tx:method name="add*" propagation="REQUIRED"/>
+                    <tx:method name="insert*" propagation="REQUIRED"/>
+                    <tx:method name="creat*" propagation="REQUIRED"/>
+                    <tx:method name="delete*" propagation="REQUIRED"/>
+                    <tx:method name="update*" propagation="REQUIRED"/>
+                    <tx:method name="select*" propagation="SUPPORTS" read-only="true"/>
+                    <tx:method name="find*" propagation="SUPPORTS"  read-only="true"/>
+                    <tx:method name="query*" propagation="SUPPORTS" read-only="true"/>
+                </tx:attributes>
+            </tx:advice>
+
+    2.4.然后准备切面
+       <!--接下来准备切面-->
+        <aop:config>
+            <!--表示任何返回值 在com.taotao.service下面的任何子包 任何方法 参数任意 都配置切面-->
+            <aop:advisor advice-ref="txAdvice" pointcut="execution(* com.taotao.service.*.*(..))" />
+        </aop:config>
+
+3.spring配置好了  接下来就是配置我们的controller  也就是我们的springmvc
+    3.1.首先还是配置我们的controller  为了就是将我们的使用了@controller交给我们的spring来管理
+         <context:component-scan base-package="com.taotao.controller"/>
+    3.2.接下来就是打开允许注解模式的开关
+         <mvc:annotation-driven></mvc:annotation-driven>
+    3.3接下来就是配置一个视图解析器用来解析视图  配上我们的前缀和后缀
+
+    <!--配置视图解析器-->
+        <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+            <property name="prefix" value="/WEB-INF/jsp/" />
+            <property name="suffix" value=".jsp" />
+        </bean>
+
+
+4.所有的spring有关的都配置好了 接下来就是配置web.xml用来初始化我们spring容器
+     <!--现在我们开始配置我们的web.xml  先加载我们的spring容器-->
+        <!-- 加载spring容器 -->
+        <context-param>
+            <param-name>contextConfigLocation</param-name>
+            <param-value>classpath:spring/applicationContext*.xml</param-value>
+        </context-param>
+        <listener>
+            <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+        </listener>
+
+    中间可能会有乱码问题 我们用一个拦截器给解决掉
+        <!-- 解决post乱码 -->
+            <filter>
+                <filter-name>CharacterEncodingFilter</filter-name>
+                <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
+                <init-param>
+                    <param-name>encoding</param-name>
+                    <param-value>utf-8</param-value>
+                </init-param>
+                <!-- <init-param>
+                    <param-name>forceEncoding</param-name>
+                    <param-value>true</param-value>
+                </init-param> -->
+            </filter>
+            <filter-mapping>
+                <filter-name>CharacterEncodingFilter</filter-name>
+                <url-pattern>/*</url-pattern>
+            </filter-mapping>
+
+   接下来就配置我们的前端控制器 加载我们的springmvc.xml文件  拦截所有请求，包括所有的静态界面  所以我们在mapper界面里面还配置了一个build
+   就是为了将我们的静态资源放行
+            <!-- springmvc的前端控制器 -->
+            <servlet>
+                <servlet-name>taotao-manager</servlet-name>
+                <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+                <!-- contextConfigLocation不是必须的， 如果不配置contextConfigLocation， springmvc的配置文件默认在：WEB-INF/servlet的name+"-servlet.xml" -->
+                <init-param>
+                    <param-name>contextConfigLocation</param-name>
+                    <param-value>classpath:spring/springmvc.xml</param-value>
+                </init-param>
+                <load-on-startup>1</load-on-startup>
+            </servlet>
+            <servlet-mapping>
+                <servlet-name>taotao-manager</servlet-name>
+                <url-pattern>/</url-pattern>
+            </servlet-mapping>
+
+
+
+好 经过测试 现在我们进行正式的开发
+首先先进入我们的后台界面  查询商品信息
+1.我们先准备一个页面跳转的控制器
+就是我们的PageController
+
+可以仔细看我们controller里面有介绍
+
+   /*
+
+   现在我们是使用easyui的框架写的后台界面  通过路径地址我们可以发现
+    地址栏的参数是http://localhost:8080/item/list?page=1&rows=30
+
+    因为是easyui写的框架  所以里面的datagrid都是发送的ajax请求  并且页面一加载就发送了  并且默认带了page(第几页)和rows(记录数)这两个参数的
+
+
+    所以我们接下来就是写itemController  里面就要处理请求
+     */
+
+//下面我们开始项目分类的加载 就是我们用异步树去加载我们的节点
+首先我们准备一个pojo里面封装了easyui 的异步树的属性  比如树节点的id 还有text 还有是否关闭的状态
+
+
+
+
+
+
+
+介绍nginx作为图片服务器  过程是相当艰辛啊
+1.首先安装nginx  然后将vsftpd 也安装好
+因为我们是要将nginx作为服务器 所以我们创建一个用户 指定用户的某个文件夹作为图片服务器的主要地址
+接下来就是配置nginx的路径作为访问的图片的基础路径
+仔细看这个文章  https://www.cnblogs.com/shuaifing/p/8268949.html  过程实在艰辛  就不一一叙述了
+
+根据common里面的图片上传工具类 我们知道我们可以将电脑的图片传到nginx里面
+我们配置/usr/local/nginx/conf/nginx.conf 主配置文件中 添加一个location并指定实际路径
+location /picture/ {
+        root  /home/ftpuser/;
+        autoindex on;
+    }
+
+
+
+    在配置vsftpd  就是在vim /etc/vsftpd/vsftpd.conf是一定要加上这些
+    local_root=/home/ftpuser/picture  重中之重
+    pam_service_name=vsftpd
+    userlist_enable=YES
+    tcp_wrappers=YES
+    allow_writeable_chroot=YES  重中之重
+    anon_root=/home/test
+    pasv_min_port=30000  重中之重
+    pasv_max_port=30999  重中之重
+
+还要开放21 端口 还有30000：30999端口
+
+这样输入虚拟机地址就能自动添加成为192.168.1.120：80/home/ftpuser 然后我们的图片是存在/home/ftpuser/picture里面的其他对应文件夹
+所以只要输入192.168.1.120/picture/加上图片的其他信息就能访问到了
+最后我发现 只有关闭防火墙才能将图片上传  但是 直接设置开机关闭防火墙 nginx就不能访问 所以每次启动虚拟机就手动关闭防火墙
+
+太难了 搭建图片服务器
+
+
+
+搭建redis集群的时候要注意
+1.redis 的版本一定要使用3.0.0以上的版本
+2.安装好了redis,就要安装ruby环境 网上有教程
+3.这些都准备好了 仔细看网上教程就能搭建集群
+我在这里说一下要注意的是
+redis的安装目录下面的redis.conf要注意一下几点
+1.bind注释掉
+2.端口改掉
+3.受保护关了
+4.允许开启集群
+5.后台运行redis打开
+
+然后就是将redis的解压目录的ruby脚本执行文件（redis-trib.rb）拷贝到redis集群文件夹里面
